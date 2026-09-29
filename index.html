@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PostgreSQL Debugging Test</title>
+  <meta name="description" content="50-question MCQ test on debugging PostgreSQL code: syntax, NULLs, grouping, joins, subqueries, window functions, constraints and types.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐞</text></svg>">
+</head>
+<body>
+
+<!-- ============================= START ============================= -->
+<section id="screen-start" class="screen is-active">
+
+  <header class="topbar">
+    <div id="quiz-title" class="wordmark">PostgreSQL <i>Debugging</i> Test</div>
+    <div class="topbar-right">
+      <span class="stepchip"><b id="meta-count">50</b> questions</span>
+      <span class="stepchip"><b id="meta-secs">60</b> sec each</span>
+      <span class="stepchip"><b>4</b> options</span>
+    </div>
+  </header>
+
+  <div class="banner">
+    <span class="tag">START</span>
+    <p id="quiz-subtitle">50 buggy snippets · 60 seconds each · find what breaks</p>
+  </div>
+
+  <div class="wrap start-wrap">
+   <div class="start-grid">
+
+    <div class="card">
+      <div class="card-head"><span>Student details</span></div>
+      <div class="card-body">
+        <label class="field">
+          <span>Full name</span>
+          <input id="in-name" type="text" autocomplete="name" placeholder="e.g. Riya Sharma" maxlength="60">
+        </label>
+        <div class="field-row">
+          <label class="field" id="field-section">
+            <span>Section</span>
+            <select id="in-section"></select>
+          </label>
+          <label class="field">
+            <span>Enrolment number</span>
+            <input id="in-enrolment" type="text" inputmode="text" autocomplete="off"
+                   placeholder="e.g. 2024CSE0142" maxlength="30" spellcheck="false">
+          </label>
+        </div>
+        <p id="form-error" class="form-error" role="alert"></p>
+        <button id="btn-start" class="btn btn-go btn-block" type="button">▶&nbsp; Start the round</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span>How the round works</span></div>
+      <div class="card-body">
+        <ul class="rules">
+          <li>Every question shows a PostgreSQL snippet with a bug. Pick the cause, the fix, or what the server actually does.</li>
+          <li>The screen goes fullscreen and the clock starts the moment a question appears. No pausing, no going back.</li>
+          <li>Answer with a click or tap — or press <kbd>1</kbd>–<kbd>4</kbd> / <kbd>A</kbd>–<kbd>D</kbd>.</li>
+          <li>A correct answer scores 10, plus up to 5 more for speed. Running out of time scores 0.</li>
+          <li>Your progress is recorded as you go, and your result is written to the class sheet when the round ends.</li>
+          <li id="privacy-note">Recorded for this round: name, section, enrolment number, network address, progress and score.</li>
+        </ul>
+        <p class="covers"><b>Covers</b> Syntax &amp; Quoting · Filtering &amp; NULLs · GROUP BY &amp; Aggregates ·
+          Joins · Subqueries &amp; CTEs · Window Functions · Constraints &amp; Transactions · Types &amp; Functions <span id="footer-note"></span></p>
+      </div>
+    </div>
+
+   </div>
+  </div>
+</section>
+
+<!-- ============================== QUIZ ============================== -->
+<section id="screen-quiz" class="screen">
+
+  <header class="topbar">
+    <div class="wordmark wordmark-sm">DEBUG <i>TEST</i></div>
+    <div class="topbar-right">
+      <span class="stepchip stepchip-num"><b id="q-counter">1 / 50</b></span>
+      <span class="hstat"><span>Score</span><b id="stat-score">0</b></span>
+      <span class="hstat"><span>Streak</span><b id="stat-streak">0</b></span>
+    </div>
+  </header>
+
+  <div class="progress"><div id="progress-fill" class="progress-fill"></div></div>
+
+  <div class="banner">
+    <span class="tag" id="q-topic">TOPIC</span>
+    <p>Read the code line by line — the answer locks the moment you pick it.</p>
+  </div>
+
+  <div class="wrap">
+    <div class="quiz-grid">
+
+      <div class="card card-timer">
+        <div class="card-head"><span>Time</span></div>
+        <div class="card-body">
+          <div id="timer" class="timer">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+              <circle id="ring-progress" class="ring-progress" cx="60" cy="60" r="52"></circle>
+            </svg>
+            <div id="timer-value" class="timer-value">60</div>
+          </div>
+          <p class="timer-note">seconds left</p>
+        </div>
+      </div>
+
+      <div id="q-card" class="card card-question">
+        <div class="card-head"><span>Find the bug</span><span class="badge" id="q-lines">SQL</span></div>
+        <div class="card-body">
+          <p id="q-text" class="q-text">Question</p>
+          <pre id="q-code" class="q-code"></pre>
+          <div id="options" class="options"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="flash" class="flash"></div>
+    <p class="hint">Keys <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> or <kbd>A</kbd> <kbd>B</kbd> <kbd>C</kbd> <kbd>D</kbd>
+      · <span id="q-total">50</span> questions in this round</p>
+  </div>
+</section>
+
+<!-- ============================= RESULT ============================= -->
+<section id="screen-result" class="screen">
+
+  <header class="topbar">
+    <div class="wordmark wordmark-sm">DEBUG <i>TEST</i></div>
+    <div class="topbar-right">
+      <button id="btn-retry" class="btn btn-go btn-sm" type="button">▶&nbsp; Play again</button>
+      <button id="btn-review-again" class="btn btn-ghost btn-sm" type="button">Back to start</button>
+    </div>
+  </header>
+
+  <div class="banner">
+    <span class="tag">RESULT</span>
+    <p id="res-verdict">Round complete.</p>
+  </div>
+
+  <div class="wrap">
+    <div class="result-grid">
+
+      <div class="card card-score">
+        <div class="card-head"><span>Score</span></div>
+        <div class="card-body score-body">
+          <div class="score-ring">
+            <svg viewBox="0 0 160 160" aria-hidden="true">
+              <circle class="ring-track" cx="80" cy="80" r="68"></circle>
+              <circle id="res-ring-fill" class="res-ring-fill" cx="80" cy="80" r="68"></circle>
+            </svg>
+            <div class="score-ring-label">
+              <strong id="res-accuracy">0%</strong>
+              <span>accuracy</span>
+            </div>
+          </div>
+          <div class="score-meta">
+            <h2 id="res-name">Player</h2>
+            <p id="res-ident" class="ident"></p>
+            <p class="big-score"><strong id="res-score">0</strong> points</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-stats">
+        <div class="card-head"><span>Breakdown</span></div>
+        <div class="card-body">
+          <div class="stat-grid">
+            <div class="stat"><strong id="res-correct">0</strong><span>Correct</span></div>
+            <div class="stat"><strong id="res-wrong">0</strong><span>Wrong</span></div>
+            <div class="stat"><strong id="res-skipped">0</strong><span>Timed out</span></div>
+            <div class="stat"><strong id="res-streak">0</strong><span>Best streak</span></div>
+            <div class="stat"><strong id="res-time">00:00</strong><span>Total time</span></div>
+            <div class="stat"><strong id="res-avg">0s</strong><span>Avg / question</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span>Topic breakdown</span></div>
+      <div class="card-body"><div id="topic-bars" class="topic-bars"></div></div>
+    </div>
+
+    <div class="card" id="leaderboard-card">
+      <div class="card-head"><span>Leaderboard</span></div>
+      <div class="card-body"><div id="leaderboard"><p class="muted">—</p></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span>Review</span>
+        <button id="review-toggle" class="review-toggle" type="button" aria-expanded="false">
+          <span>What you missed (<span id="review-count">0</span>)</span>
+          <span id="review-caret">▼</span>
+        </button>
+      </div>
+      <div class="card-body">
+        <div id="review-list" class="review-list"></div>
+      </div>
+    </div>
+
+    <p id="save-status" class="save-status is-idle">—</p>
+  </div>
+</section>
+
+<footer class="sitefoot">
+  <strong>Satyaki Das</strong>
+  <span class="sf-sep">·</span>
+  <span class="sf-role">Assistant Professor</span>
+  <span class="sf-sep">·</span>
+  <span class="sf-org">Rishihood University <i>&times;</i> Newton School of Technology</span>
+</footer>
+
+<script src="js/config.js?v=3"></script>
+<script src="js/questions.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
+</body>
+</html>
