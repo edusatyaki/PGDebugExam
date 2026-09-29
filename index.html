@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="stylesheet" href="css/style.css?v=5">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐞</text></svg>">
 </head>
 <body>
@@ -19,7 +19,7 @@
   <header class="topbar">
     <div id="quiz-title" class="wordmark">PostgreSQL <i>Debugging</i> Test</div>
     <div class="topbar-right">
-      <span class="stepchip"><b id="meta-count">50</b> questions</span>
+      <span class="stepchip"><b id="meta-count">75</b> questions</span>
       <span class="stepchip"><b id="meta-secs">60</b> sec each</span>
       <span class="stepchip"><b>4</b> options</span>
     </div>
@@ -27,7 +27,7 @@
 
   <div class="banner">
     <span class="tag">START</span>
-    <p id="quiz-subtitle">50 buggy snippets · 60 seconds each · find what breaks</p>
+    <p id="quiz-subtitle">75 buggy snippets · 60 seconds each · find what breaks</p>
   </div>
 
   <div class="wrap start-wrap">
@@ -61,6 +61,7 @@
       <div class="card-body">
         <ul class="rules">
           <li>Every question shows a PostgreSQL snippet with a bug. Pick the cause, the fix, or what the server actually does.</li>
+          <li>Some show the <b>ERROR</b> PostgreSQL printed when the query ran — choose the change that fixes it.</li>
           <li>The screen goes fullscreen and the clock starts the moment a question appears. No pausing, no going back.</li>
           <li>Answer with a click or tap — or press <kbd>1</kbd>–<kbd>4</kbd> / <kbd>A</kbd>–<kbd>D</kbd>.</li>
           <li>A correct answer scores 10, plus up to 5 more for speed. Running out of time scores 0.</li>
@@ -68,7 +69,7 @@
           <li id="privacy-note">Recorded for this round: name, section, enrolment number, network address, progress and score.</li>
         </ul>
         <p class="covers"><b>Covers</b> Syntax &amp; Quoting · Filtering &amp; NULLs · GROUP BY &amp; Aggregates ·
-          Joins · Subqueries &amp; CTEs · Window Functions · Constraints &amp; Transactions · Types &amp; Functions <span id="footer-note"></span></p>
+          Joins · Subqueries, CTEs &amp; UNION · Window Functions · DDL, Constraints &amp; Transactions · Types &amp; Functions <span id="footer-note"></span></p>
       </div>
     </div>
 
@@ -82,7 +83,7 @@
   <header class="topbar">
     <div class="wordmark wordmark-sm">DEBUG <i>TEST</i></div>
     <div class="topbar-right">
-      <span class="stepchip stepchip-num"><b id="q-counter">1 / 50</b></span>
+      <span class="stepchip stepchip-num"><b id="q-counter">1 / 75</b></span>
       <span class="hstat"><span>Score</span><b id="stat-score">0</b></span>
       <span class="hstat"><span>Streak</span><b id="stat-streak">0</b></span>
     </div>
@@ -117,6 +118,7 @@
         <div class="card-body">
           <p id="q-text" class="q-text">Question</p>
           <pre id="q-code" class="q-code"></pre>
+          <pre id="q-error" class="q-error" aria-label="Error returned by PostgreSQL"></pre>
           <div id="options" class="options"></div>
         </div>
       </div>
@@ -125,7 +127,7 @@
 
     <div id="flash" class="flash"></div>
     <p class="hint">Keys <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> or <kbd>A</kbd> <kbd>B</kbd> <kbd>C</kbd> <kbd>D</kbd>
-      · <span id="q-total">50</span> questions in this round</p>
+      · <span id="q-total">75</span> questions in this round</p>
   </div>
 </section>
 
@@ -220,8 +222,8 @@
   <span class="sf-org">Rishihood University <i>&times;</i> Newton School of Technology</span>
 </footer>
 
-<script src="js/config.js?v=3"></script>
-<script src="js/questions.js?v=3"></script>
-<script src="js/app.js?v=3"></script>
+<script src="js/config.js?v=5"></script>
+<script src="js/questions.js?v=5"></script>
+<script src="js/app.js?v=5"></script>
 </body>
 </html>

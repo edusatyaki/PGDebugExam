@@ -1,32 +1,41 @@
 # PostgreSQL Debugging Test
 
-A static MCQ test on **debugging PostgreSQL code: 50 questions, 4 options each, 60 seconds per question**, no going back.
-Every question shows a SQL snippet with a bug in it; students pick the cause, the fix, or what the server actually does.
+A static MCQ test on **debugging PostgreSQL code: 75 questions, 4 options each, 60 seconds per question**, no going back.
 Built on the same engine and design as [DBMSExam](https://github.com/edusatyaki/DBMSExam). Runs entirely on GitHub Pages;
 results are written to a Google Sheet through a Google Apps Script web app.
 
-| Topic | Qs |
-|---|---|
-| Syntax & Quoting | 6 |
-| Filtering & NULLs | 7 |
-| GROUP BY & Aggregates | 7 |
-| Joins | 7 |
-| Subqueries & CTEs | 5 |
-| Window Functions | 5 |
-| Constraints & Transactions | 6 |
-| Types & Functions | 7 |
+Two kinds of question, mixed through every topic:
+
+- **Find the bug (50)** — a SQL snippet with a bug; pick the cause, the fix, or what the server actually does.
+- **Error → fix (25)** — the snippet *and* the exact error PostgreSQL printed when it ran, shown in a red
+  psql-style panel (`ERROR:` / `DETAIL:` / `HINT:`); pick the change that fixes it.
+
+| Topic | Qs | of which Error → fix |
+|---|---|---|
+| Syntax & Quoting | 11 | 5 |
+| Filtering & NULLs | 9 | 2 |
+| GROUP BY & Aggregates | 7 | 0 |
+| Joins | 8 | 1 |
+| Subqueries, CTEs & UNION | 7 | 2 |
+| Window Functions | 6 | 1 |
+| DDL, Constraints & Transactions | 15 | 9 |
+| Types & Functions | 12 | 5 |
+
+The error panels show DETAIL lines as PostgreSQL prints them, but leave out HINT lines that would give the
+answer away (e.g. `Use OVERRIDING SYSTEM VALUE`). The one HINT kept, on the date question, points the wrong way
+on purpose — changing `datestyle` does not fix a year-first date.
 
 Every error message and behaviour the questions rely on was checked by running the snippets on
-PostgreSQL 16 (see [`verify/verify.sql`](verify/verify.sql)).
+PostgreSQL 16 (see [`verify/`](verify/)).
 
 ```
 index.html            the whole UI (start → quiz → result)
 css/style.css
 js/config.js          ← the only file you normally edit
-js/questions.js       the 50-question bank
+js/questions.js       the 75-question bank
 js/app.js             timer, scoring, SQL highlighting, submission
 apps-script/Code.gs   paste this into the Google Sheet's Apps Script editor
-verify/verify.sql     runs every snippet against a real server
+verify/*.sql          run every snippet against a real server
 ```
 
 > **Use a new Google Sheet for this test.** `APPS_SCRIPT_URL` ships empty on purpose, so results
@@ -131,8 +140,8 @@ updates itself, and the column simply stays empty.
 ### Live progress and Apps Script quotas
 
 Each student sends a checkpoint every `PROGRESS_EVERY` questions (default 10), plus one at the
-start, one at the end, and one whenever they leave or return to the page. For a 50-question round
-that is roughly seven writes per student. Progress writes take a short lock and **give up quietly
+start, one at the end, and one whenever they leave or return to the page. For a 75-question round
+that is roughly ten writes per student. Progress writes take a short lock and **give up quietly
 if the sheet is busy** — the next checkpoint carries the newer state anyway, so nothing is lost.
 Raise `PROGRESS_EVERY` if you are running a very large cohort, or set `PROGRESS_TRACKING: false`
 to record only the final result.
@@ -146,7 +155,7 @@ Everything lives in `js/config.js`:
 | `FULLSCREEN_ON_START` | `true` | Go fullscreen when the student presses Start |
 | `SECONDS_PER_QUESTION` | `60` | Countdown per question |
 | `WARN_AT_SECONDS` / `DANGER_AT_SECONDS` | `15` / `5` | When the ring turns amber / red |
-| `QUESTIONS_PER_ROUND` | `50` | Serve fewer for a quick practice round |
+| `QUESTIONS_PER_ROUND` | `75` | Set `50` to give each student a random 50 of the 75 |
 | `SHUFFLE_QUESTIONS` | `true` | Randomise the order per attempt |
 | `SHUFFLE_OPTIONS` | `true` | Randomise A–D per question |
 | `SECTIONS` | `["A","B","C","D","E"]` | Dropdown options; `[]` gives a free-text box instead |
@@ -162,10 +171,10 @@ timeout scores 0 and breaks the streak.
 
 ### Keeping browsers from serving a stale copy
 
-`index.html` loads its assets with a `?v=3` suffix:
+`index.html` loads its assets with a `?v=5` suffix:
 
 ```html
-<script src="js/questions.js?v=3"></script>
+<script src="js/questions.js?v=5"></script>
 ```
 
 GitHub Pages caches aggressively, so **bump that number whenever you change the questions, the
@@ -174,7 +183,9 @@ timer or the styling** — otherwise returning students may keep running the old
 ### Adding or editing questions
 
 `js/questions.js` is a plain array. Text wrapped in \`backticks\` renders as inline code; `c` is the
-snippet, written as a template literal, and renders as a numbered, highlighted code block.
+snippet, written as a template literal, and renders as a numbered, highlighted code block. The optional
+`e` field is the error output, shown in the red panel under the code — that is what makes it an
+"Error → fix" question.
 
 ```js
 { t: "Joins", a: 2,
@@ -183,10 +194,18 @@ snippet, written as a template literal, and renders as a numbered, highlighted c
 FROM customers c
 JOIN orders o ON c.id = o.customer_id;`,
   o: ["`missing FROM-clause entry`", "No error", "`column reference \"id\" is ambiguous`", "`syntax error`"] },
+
+{ t: "Joins", a: 0,
+  q: "Goal: names with order amounts above 500. How do you fix this error?",
+  c: `SELECT c.name, o.amount
+FROM customers c
+WHERE o.amount > 500;`,
+  e: `ERROR:  missing FROM-clause entry for table "o"`,
+  o: ["Add `JOIN orders o ON o.customer_id = c.id`", "…", "…", "…"] },
 ```
 
 `t` = topic (drives the breakdown chart), `a` = **index** of the correct option (0–3), `o` = exactly four options.
-If you add a question that quotes an error message, add its snippet to `verify/verify.sql` and run it:
+If you add a question that quotes an error message, add its snippet to `verify/verify.sql` (or `verify/errors.sql` for Error → fix) and run it:
 
 ```bash
 psql -d scratch -X -f verify/verify.sql

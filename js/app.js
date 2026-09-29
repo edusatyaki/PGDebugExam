@@ -49,6 +49,17 @@
     return html.split("\n").map((line) => '<span class="ln">' + (line || " ") + "</span>").join("");
   }
 
+  /* psql-style error output: the ERROR / DETAIL / HINT label is picked out
+     so students learn to read the first word of each line. */
+  function formatError(src) {
+    return src.split("\n").map((line) => {
+      const m = /^(ERROR|DETAIL|HINT):(\s*)(.*)$/.exec(line);
+      if (!m) return '<span class="err-line">' + escapeHTML(line) + "</span>";
+      return '<span class="err-line"><span class="err-' + m[1].toLowerCase() + '">' + m[1] +
+        ":</span>" + m[2] + escapeHTML(m[3]) + "</span>";
+    }).join("");
+  }
+
   const shuffle = (arr) => {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -215,6 +226,9 @@
       code.style.display = "none";
       $("#q-lines").textContent = "SQL";
     }
+    const err = $("#q-error");
+    err.innerHTML = item.e ? formatError(item.e) : "";
+    err.style.display = item.e ? "" : "none";
 
     const box = $("#options");
     box.innerHTML = "";
@@ -265,7 +279,7 @@
     }
 
     S.log.push({
-      n: S.i + 1, topic: item.t, q: item.q, c: item.c || "",
+      n: S.i + 1, topic: item.t, q: item.q, c: item.c || "", e: item.e || "",
       picked: item.o[chosen], answer: item.correctText,
       right: isRight, secs: +taken.toFixed(2)
     });
@@ -287,7 +301,7 @@
     flash("out");
 
     S.log.push({
-      n: S.i + 1, topic: item.t, q: item.q, c: item.c || "",
+      n: S.i + 1, topic: item.t, q: item.q, c: item.c || "", e: item.e || "",
       picked: "— timed out —", answer: item.correctText,
       right: false, secs: CONFIG.SECONDS_PER_QUESTION
     });
@@ -397,6 +411,7 @@
       el.innerHTML =
         '<div class="review-q"><span class="review-n">Q' + r.n + "</span>" + fmt(r.q) + "</div>" +
         (r.c ? '<pre class="q-code q-code-sm">' + highlightSQL(r.c) + "</pre>" : "") +
+        (r.e ? '<pre class="q-error q-error-sm">' + formatError(r.e) + "</pre>" : "") +
         '<div class="review-line review-bad">Your answer: ' + fmt(r.picked) + "</div>" +
         '<div class="review-line review-good">Correct: ' + fmt(r.answer) + "</div>" +
         '<div class="review-topic">' + escapeHTML(r.topic) + "</div>";
