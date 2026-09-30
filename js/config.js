@@ -11,7 +11,7 @@ const CONFIG = {
 
   /* Branding shown on the start screen */
   QUIZ_TITLE:    "PostgreSQL <i>Debugging</i> Test",
-  QUIZ_SUBTITLE: "75 buggy snippets · 90 seconds each · find what breaks",
+  QUIZ_SUBTITLE: "50 buggy snippets · 90 seconds each · find what breaks",
   FOOTER_NOTE:   "· verified on PostgreSQL 16",
 
   /* The round only begins once the browser is in fullscreen. Esc or F11
@@ -38,7 +38,7 @@ const CONFIG = {
 
   /* Timing & round settings */
   SECONDS_PER_QUESTION: 90,   // countdown per question
-  QUESTIONS_PER_ROUND:  75,   // how many of the bank to serve (set 50 for a random 50)
+  QUESTIONS_PER_ROUND:  50,   // a random 50 of the 75-question bank per attempt
   WARN_AT_SECONDS:      15,   // ring turns amber at this many seconds left
   DANGER_AT_SECONDS:    5,    // ring turns red and pulses
   FEEDBACK_MS:          550,  // how long the green/red flash lasts

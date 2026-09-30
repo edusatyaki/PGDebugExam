@@ -1,6 +1,6 @@
 # PostgreSQL Debugging Test
 
-A static MCQ test on **debugging PostgreSQL code: 75 questions, 4 options each, 90 seconds per question**, no going back.
+A static MCQ test on **debugging PostgreSQL code: 50 questions per attempt (drawn at random from a bank of 75), 4 options each, 90 seconds per question**, no going back.
 Built on the same engine and design as [DBMSExam](https://github.com/edusatyaki/DBMSExam). Runs entirely on GitHub Pages;
 results are written to a Google Sheet through a Google Apps Script web app.
 
@@ -140,7 +140,7 @@ updates itself, and the column simply stays empty.
 ### Live progress and Apps Script quotas
 
 Each student sends a checkpoint every `PROGRESS_EVERY` questions (default 10), plus one at the
-start, one at the end, and one whenever they leave or return to the page. For a 75-question round
+start, one at the end, and one whenever they leave or return to the page. For a 50-question round
 that is roughly ten writes per student. Progress writes take a short lock and **give up quietly
 if the sheet is busy** — the next checkpoint carries the newer state anyway, so nothing is lost.
 Raise `PROGRESS_EVERY` if you are running a very large cohort, or set `PROGRESS_TRACKING: false`
@@ -159,7 +159,7 @@ Everything lives in `js/config.js`:
 | `RESIZE_TOLERANCE_PX` | `30` | Size change ignored as noise |
 | `SECONDS_PER_QUESTION` | `90` | Countdown per question |
 | `WARN_AT_SECONDS` / `DANGER_AT_SECONDS` | `15` / `5` | When the ring turns amber / red |
-| `QUESTIONS_PER_ROUND` | `75` | Set `50` to give each student a random 50 of the 75 |
+| `QUESTIONS_PER_ROUND` | `50` | Each student gets a random 50 of the 75; set `75` for all of them |
 | `SHUFFLE_QUESTIONS` | `true` | Randomise the order per attempt |
 | `SHUFFLE_OPTIONS` | `true` | Randomise A–D per question |
 | `SECTIONS` | `["A","B","C","D","E"]` | Dropdown options; `[]` gives a free-text box instead |
