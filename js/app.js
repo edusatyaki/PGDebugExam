@@ -833,6 +833,47 @@
     S.resizeTimer = setTimeout(checkSize, 600);
   }
 
+  /* The alarm is synthesised with Web Audio, so there is no sound file to
+     load. Browsers only allow audio after a user gesture, so the context is
+     created on the Start click and simply reused when the alarm fires. */
+  let audioCtx = null;
+  let alarmUntil = 0;
+
+  function unlockAudio() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      audioCtx = audioCtx || new AC();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    } catch (e) { /* no audio on this device — the red warning still shows */ }
+  }
+
+  // A rising-and-falling siren, one sweep per second.
+  function soundAlarm() {
+    const secs = CONFIG.ALARM_SECONDS;
+    if (!secs || !audioCtx || Date.now() < alarmUntil) return;   // don't stack sirens
+    alarmUntil = Date.now() + secs * 1000;
+    try {
+      audioCtx.resume();
+      const t0 = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "square";
+      for (let t = 0; t < secs; t++) {
+        osc.frequency.setValueAtTime(650, t0 + t);
+        osc.frequency.linearRampToValueAtTime(1300, t0 + t + 0.5);
+        osc.frequency.linearRampToValueAtTime(650, t0 + t + 1);
+      }
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.4, t0 + 0.05);
+      gain.gain.setValueAtTime(0.4, t0 + secs - 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + secs);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + secs);
+    } catch (e) { /* ignore */ }
+  }
+
   const totalViolations = () => S.v.exits + S.v.resizes + S.v.inspect + S.v.automation;
   const isMalpractice = () => totalViolations() >= CONFIG.MALPRACTICE_LIMIT;
 
@@ -855,6 +896,8 @@
     renderViolations();
     sendProgress(reached ? "malpractice" : "violation");
 
+    // From the limit on, every violation sets the alarm off again.
+    if (isMalpractice()) soundAlarm();
     if (reached && CONFIG.END_AT_LIMIT) { endForMalpractice(); return; }
     showGuard(message);
   }
@@ -884,6 +927,8 @@
       ? "This attempt is recorded as malpractice. You may finish the test, and your instructor will review it."
       : "At " + CONFIG.MALPRACTICE_LIMIT + " violations the attempt is recorded as malpractice. The clock is still running.";
     $("#guard-btn").textContent = enforceFs() && !isFullscreen() ? "Return to fullscreen" : "Back to the question";
+    $("#guard").classList.toggle("is-alarm", isMalpractice());
+    $("#guard-tag").textContent = isMalpractice() ? "MALPRACTICE" : "WARNING";
     $("#guard").hidden = false;
     $("#guard-btn").focus();
   }
@@ -891,6 +936,7 @@
   function hideGuard() { $("#guard").hidden = true; }
 
   function onGuardButton() {
+    unlockAudio();
     if (!enforceFs() || isFullscreen()) { hideGuard(); return; }
     // The overlay stays up until fullscreen is back and the size re-checked.
     enterFullscreen().catch(() => {
@@ -965,6 +1011,7 @@
 
   /* -------------------------------- start -------------------------------- */
   function startQuiz() {
+    unlockAudio();                  // inside the click, so the alarm can play later
     if (S.awaitingFs) return;
     const name      = $("#in-name").value.trim();
     const section   = $("#in-section").value.trim();

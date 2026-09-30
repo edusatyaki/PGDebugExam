@@ -493,3 +493,11 @@ code{
 .guard-break dt{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .guard-break dd{margin:0;font-family:var(--display);font-weight:700;font-size:1.1rem;color:var(--ink)}
 @media (max-width:420px){.guard-break{grid-template-columns:repeat(2,1fr)}}
+
+/* Past the malpractice limit: red, and pulsing while the alarm sounds. */
+.guard.is-alarm{background:rgba(69,10,10,.95);animation:alarmBg 1s ease-in-out infinite}
+.guard.is-alarm .guard-box{border-top-color:var(--red)}
+.guard.is-alarm .tag{background:var(--red)}
+.guard.is-alarm #guard-title{color:var(--red)}
+@keyframes alarmBg{50%{background:rgba(185,28,28,.95)}}
+@media (prefers-reduced-motion:reduce){.guard.is-alarm{animation:none}}

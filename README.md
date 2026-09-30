@@ -156,6 +156,7 @@ Everything lives in `js/config.js`:
 | `PROCTORING` | `true` | Count violations and show a warning for each (see below) |
 | `MALPRACTICE_LIMIT` | `10` | This many violations marks the attempt as malpractice |
 | `END_AT_LIMIT` | `false` | `true` also stops the test at the limit |
+| `ALARM_SECONDS` | `6` | Siren at the limit and on each violation after it; `0` = silent |
 | `RESIZE_TOLERANCE_PX` | `30` | Size change ignored as noise |
 | `SECONDS_PER_QUESTION` | `90` | Countdown per question |
 | `WARN_AT_SECONDS` / `DANGER_AT_SECONDS` | `15` / `5` | When the ring turns amber / red |
@@ -237,7 +238,8 @@ psql -d scratch -X -f verify/verify.sql
 
   At `MALPRACTICE_LIMIT` (10) violations the attempt is marked **malpractice**: the `Malpractice`
   column is `TRUE`, `Malpractice Reason` records the counts at that moment, and the attempt is kept
-  off the leaderboard. The student may still finish unless `END_AT_LIMIT` is `true`. Students can
+  off the leaderboard. A siren sounds for `ALARM_SECONDS` and the warning turns red; it sounds
+  again on every later violation. The student may still finish unless `END_AT_LIMIT` is `true`. Students can
   sit the test any number of times; every attempt is its own row.
   - *Limits* — `Esc` cannot be blocked by any web page, only counted. Developer tools opened
     **undocked** from the browser menu don't change the page size, but they take focus, which counts
