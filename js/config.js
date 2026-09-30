@@ -23,17 +23,18 @@ const CONFIG = {
 
   /* --------------------------- Proctoring ----------------------------- */
 
-  /* Ends the attempt as malpractice when, during the round:
-       - the fullscreen size differs from the size measured on entry
-         (a docked Inspect panel, split screen, a second display),
-       - a developer-tools shortcut is pressed (F12, Ctrl+Shift+I, Cmd+Opt+I…),
-       - an answer is clicked by a script instead of a real mouse/keyboard,
-       - the browser reports it is driven by automation (Selenium, Playwright).
-     The terminated attempt is still saved to the sheet with the reason. */
+  /* Each of these is a violation. The student sees a warning with the
+     running count and carries on with the test:
+       - leaving fullscreen, switching tab/app, minimising the window,
+       - the window or screen size changing (maximise/restore, a docked
+         Inspect panel, split screen),
+       - trying to open Inspect (F12, Ctrl+Shift+I, Cmd+Opt+I, right-click…),
+       - an answer clicked by a script instead of a real mouse or keyboard.
+     Every count is saved to the sheet, with Malpractice TRUE/FALSE. */
   PROCTORING: true,
+  MALPRACTICE_LIMIT: 10,     // this many violations = malpractice
+  END_AT_LIMIT: false,       // true = also stop the test at the limit
   RESIZE_TOLERANCE_PX: 30,   // size change (CSS px) ignored as noise
-  MAX_EXITS: 0,              // end the attempt after this many exits; 0 = warn only
-  LOCK_AFTER_MALPRACTICE: true,  // refuse a new attempt with the same enrolment in this browser
 
   /* Timing & round settings */
   SECONDS_PER_QUESTION: 90,   // countdown per question

@@ -2,8 +2,10 @@
  * =====================================================================
  * PostgreSQL Debugging Test — Google Apps Script backend
  * ---------------------------------------------------------------------
- * Stores, per student: name, section, enrolment number, network address,
- * live progress and final score.
+ * Stores, per attempt: name, section, enrolment number, network address,
+ * live progress, final score, and proctoring counts — Malpractice (TRUE /
+ * FALSE), screen exits, resizes, Inspect attempts and scripted clicks.
+ * A student may sit the test any number of times; each attempt is a row.
  *
  * Three sheets are maintained:
  *   Responses — one row per completed attempt (the gradebook)
@@ -36,13 +38,15 @@ var HEADERS = [
   'Score', 'Total Questions', 'Answered', 'Correct', 'Wrong', 'Timed Out',
   'Accuracy %', 'Best Streak', 'Left Page', 'Time Taken (s)', 'Avg per Q (s)',
   'Topic Breakdown', 'Client Time', 'User Agent',
-  'Fullscreen Exits', 'Malpractice', 'Malpractice Reason', 'Screen on Entry'
+  'Malpractice', 'Violations', 'Screen Exits', 'Resizes', 'Inspect Attempts',
+  'Automated Clicks', 'Malpractice Reason', 'Screen on Entry'
 ];
 
 var LIVE_HEADERS = [
   'Attempt ID', 'Last Update', 'Name', 'Section', 'Enrolment No', 'IP Address',
   'Status', 'Answered', 'Total', 'Progress %', 'Correct', 'Wrong', 'Timed Out',
-  'Score', 'Left Page', 'Elapsed (s)', 'Fullscreen Exits', 'Malpractice Reason'
+  'Score', 'Left Page', 'Elapsed (s)', 'Malpractice', 'Violations', 'Screen Exits',
+  'Resizes', 'Inspect Attempts', 'Automated Clicks'
 ];
 
 var DETAIL_HEADERS = [
@@ -117,8 +121,9 @@ function saveResult(body) {
       body.topicBreakdown || '',
       body.clientTime || '',
       body.userAgent || '',
-      num(body.fullscreenExits),
-      body.malpractice || 'NO',
+      body.malpractice === true,
+      num(body.violations), num(body.screenExits), num(body.resizes),
+      num(body.inspectAttempts), num(body.automatedClicks),
       body.malpracticeReason || '',
       body.screenBaseline || ''
     ]);
@@ -164,7 +169,9 @@ function saveProgress(body) {
       num(body.answered), num(body.total), num(body.progressPct),
       num(body.correct), num(body.wrong), num(body.skipped),
       num(body.score), num(body.leftPageCount), num(body.elapsedSec),
-      num(body.fullscreenExits), body.malpracticeReason || ''
+      body.malpractice === true,
+      num(body.violations), num(body.screenExits), num(body.resizes),
+      num(body.inspectAttempts), num(body.automatedClicks)
     ];
 
     var target = findRowByAttemptId(sheet, id);
@@ -223,7 +230,7 @@ function leaderboard(limit) {
   var best = {};
   values.forEach(function (r) {
     var key = String(r[4] || r[2] || '').toLowerCase().trim();   // enrolment, else name
-    if (!key || r[21] === 'YES') return;                         // malpractice: not ranked
+    if (!key || r[20] === true) return;                          // malpractice: not ranked
     var entry = {
       name: r[2], section: r[3], enrolment: r[4],
       score: Number(r[6]) || 0,

@@ -153,10 +153,10 @@ Everything lives in `js/config.js`:
 | Setting | Default | Meaning |
 |---|---|---|
 | `FULLSCREEN_ON_START` | `true` | The round only begins once the browser is in fullscreen |
-| `PROCTORING` | `true` | Count exits and end the attempt on malpractice (see below) |
+| `PROCTORING` | `true` | Count violations and show a warning for each (see below) |
+| `MALPRACTICE_LIMIT` | `10` | This many violations marks the attempt as malpractice |
+| `END_AT_LIMIT` | `false` | `true` also stops the test at the limit |
 | `RESIZE_TOLERANCE_PX` | `30` | Size change ignored as noise |
-| `MAX_EXITS` | `0` | End the attempt after this many exits; `0` = warn only |
-| `LOCK_AFTER_MALPRACTICE` | `true` | Refuse a new attempt with the same enrolment in that browser |
 | `SECONDS_PER_QUESTION` | `90` | Countdown per question |
 | `WARN_AT_SECONDS` / `DANGER_AT_SECONDS` | `15` / `5` | When the ring turns amber / red |
 | `QUESTIONS_PER_ROUND` | `75` | Set `50` to give each student a random 50 of the 75 |
@@ -224,23 +224,27 @@ psql -d scratch -X -f verify/verify.sql
   be exam-grade, the scoring has to move server-side (send only the picked index to Apps Script and
   grade it there against a private copy of the key).
 - **Proctoring.** Pressing Start requests fullscreen, and the clock does not start until it is
-  granted. The screen and viewport size are measured on that first entry.
-  - *Exits* — `Esc`, switching tabs, or the window losing focus covers the question with a warning
-    showing the exit count. The clock keeps running. The count is shown in the top bar and sent to
-    the `Fullscreen Exits` column.
-  - *Malpractice* — the attempt ends at once, cannot be continued, and is saved with the reason in
-    `Malpractice Reason` when: the fullscreen size changes from the one measured on entry (a docked
-    Inspect panel, split screen, another display); a developer-tools shortcut is pressed (F12,
-    Ctrl+Shift+I/J/C, Cmd+Opt+I/J/C, Ctrl+U); an answer is clicked by a script rather than a real
-    mouse or keyboard (`event.isTrusted`); or the browser reports automation (`navigator.webdriver`).
-    Malpractice attempts are kept off the leaderboard.
+  granted. The screen and viewport size are measured on that first entry. After that, each of these
+  is a **violation**: the question is covered by a warning showing the running count and a
+  breakdown, and the student carries on (the clock does not stop).
+
+  | Violation | Sheet column | Caused by |
+  |---|---|---|
+  | Screen exit | `Screen Exits` | Esc out of fullscreen, switching tab or app, minimising the window |
+  | Resize | `Resizes` | The window or screen size moving away from the one measured on entry (maximise/restore, a docked Inspect panel, split screen, another display) |
+  | Inspect attempt | `Inspect Attempts` | F12, Ctrl+Shift+I/J/C/K, Cmd+Opt+I/J/C/U, Ctrl+U, right-click |
+  | Automated click | `Automated Clicks` | An answer clicked by a script (`event.isTrusted` is false) — the click is ignored — or `navigator.webdriver` |
+
+  At `MALPRACTICE_LIMIT` (10) violations the attempt is marked **malpractice**: the `Malpractice`
+  column is `TRUE`, `Malpractice Reason` records the counts at that moment, and the attempt is kept
+  off the leaderboard. The student may still finish unless `END_AT_LIMIT` is `true`. Students can
+  sit the test any number of times; every attempt is its own row.
   - *Limits* — `Esc` cannot be blocked by any web page, only counted. Developer tools opened
     **undocked** from the browser menu don't change the page size, but they take focus, which counts
-    as an exit. OS-level auto-clickers produce real input and can't be told apart. The re-attempt
-    lock lives in `localStorage`, so another browser or cleared site data gets round it — the sheet
-    is the record that counts. iPhone Safari has no Fullscreen API, so there the round runs windowed
-    and only width changes are checked.
-  - After updating `Code.gs`, run `setup()` once so the new header columns are written.
+    as a screen exit. OS-level auto-clickers produce real input and can't be told apart. iPhone
+    Safari has no Fullscreen API, so there the round runs windowed and only width changes count.
+  - After updating `Code.gs`, run `setup()` once so the new header columns are written, then deploy
+    a new version.
 - **Name, section and enrolment number are self-reported.** Nothing stops a student typing someone
   else's. If that matters, run the round in a supervised session, or put a Google Form sign-in in
   front of it so the identity comes from a Google account instead.

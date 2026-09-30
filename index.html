@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=7">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐞</text></svg>">
 </head>
 <body>
@@ -63,8 +63,8 @@
           <li>Every question shows a PostgreSQL snippet with a bug. Pick the cause, the fix, or what the server actually does.</li>
           <li>Some show the <b>ERROR</b> PostgreSQL printed when the query ran — choose the change that fixes it.</li>
           <li>The test runs in fullscreen and the clock starts the moment a question appears. No pausing, no going back.</li>
-          <li>Leaving fullscreen or switching tabs/windows hides the question and is <b>counted and reported</b>. The clock keeps running.</li>
-          <li>Opening Inspect / developer tools, resizing the screen, or answering with a script is <b>malpractice</b>: the test ends at once.</li>
+          <li>Leaving fullscreen, switching tabs, minimising or resizing the window, opening Inspect, or answering with a script is a <b>violation</b>. Each one shows a warning and is reported. The clock keeps running.</li>
+          <li><b>10 violations</b> and the attempt is recorded as <b>malpractice</b>.</li>
           <li>Answer with a click or tap — or press <kbd>1</kbd>–<kbd>4</kbd> / <kbd>A</kbd>–<kbd>D</kbd>.</li>
           <li>A correct answer scores 10, plus up to 5 more for speed. Running out of time scores 0.</li>
           <li>Your progress is recorded as you go, and your result is written to the class sheet when the round ends.</li>
@@ -88,7 +88,7 @@
       <span class="stepchip stepchip-num"><b id="q-counter">1 / 75</b></span>
       <span class="hstat"><span>Score</span><b id="stat-score">0</b></span>
       <span class="hstat"><span>Streak</span><b id="stat-streak">0</b></span>
-      <span class="hstat" id="hstat-exits"><span>Exits</span><b id="stat-exits">0</b></span>
+      <span class="hstat" id="hstat-exits"><span>Violations</span><b id="stat-exits">0</b></span>
     </div>
   </header>
 
@@ -154,7 +154,7 @@
         <dl class="term-facts">
           <dt>Student</dt><dd id="term-who"></dd>
           <dt>Stopped at</dt><dd id="term-where"></dd>
-          <dt>Exits from fullscreen</dt><dd id="term-exits"></dd>
+          <dt>Violations</dt><dd id="term-exits"></dd>
           <dt>Screen on entry</dt><dd id="term-screen"></dd>
         </dl>
         <p class="muted">Your answers so far and this reason have been sent to your instructor. Speak to the invigilator.</p>
@@ -251,10 +251,16 @@
 <div id="guard" class="guard" role="alertdialog" aria-modal="true" aria-labelledby="guard-title" hidden>
   <div class="guard-box">
     <span class="tag tag-warn">WARNING</span>
-    <h2 id="guard-title">You left the exam screen</h2>
+    <h2 id="guard-title">Warning</h2>
     <p id="guard-msg" class="guard-msg"></p>
-    <div class="guard-count"><span>Exit attempts</span><b id="guard-count">1</b><em id="guard-limit"></em></div>
-    <p class="guard-note">The clock is still running and every exit is reported to your instructor.</p>
+    <div class="guard-count"><span>Violations</span><b id="guard-count">1</b><em id="guard-limit"></em></div>
+    <dl class="guard-break">
+      <div><dt>Screen exits</dt><dd id="g-exits">0</dd></div>
+      <div><dt>Resizes</dt><dd id="g-resizes">0</dd></div>
+      <div><dt>Inspect</dt><dd id="g-inspect">0</dd></div>
+      <div><dt>Scripted clicks</dt><dd id="g-auto">0</dd></div>
+    </dl>
+    <p id="guard-note" class="guard-note"></p>
     <button id="guard-btn" class="btn btn-go btn-block" type="button">Return to fullscreen</button>
   </div>
 </div>
@@ -267,8 +273,8 @@
   <span class="sf-org">Rishihood University <i>&times;</i> Newton School of Technology</span>
 </footer>
 
-<script src="js/config.js?v=6"></script>
-<script src="js/questions.js?v=6"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/config.js?v=7"></script>
+<script src="js/questions.js?v=7"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>

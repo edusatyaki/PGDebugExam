@@ -132,8 +132,9 @@
     // proctoring
     awaitingFs: false,    // Start pressed, waiting for fullscreen to take effect
     baseline: null,       // screen + viewport measured on first fullscreen entry
-    exitCount: 0,         // exits from fullscreen / the window, deduplicated
+    v: { exits: 0, resizes: 0, inspect: 0, automation: 0 },   // violation counts
     lastExitAt: 0,
+    lastSizeKey: "",
     settlingUntil: 0,     // ignore resizes while a fullscreen transition animates
     resizeTimer: null,
     terminated: false,
@@ -270,8 +271,9 @@
     if (S.locked) return;
     // A real mouse, touch or key press is always trusted. el.click() or
     // dispatchEvent() from the console, a bookmarklet or an extension is not.
+    // The scripted click is ignored and counted; the student can still answer.
     if (CONFIG.PROCTORING && ev && !ev.isTrusted) {
-      malpractice("An answer was clicked automatically by a script, not by the student.");
+      violation("automation", "An answer was clicked automatically by a script. It was not accepted.");
       return;
     }
     S.locked = true;
@@ -350,6 +352,7 @@
   function finish() {
     if (S.terminated) return;
     stopTimer();
+    hideGuard();
     S.finished = true;
     const totalSecs = (Date.now() - S.startedAt) / 1000;
     const total = S.deck.length;
@@ -380,6 +383,9 @@
       accuracy >= 60 ? "Decent eye for bugs. Tighten the weak topics below." :
       accuracy >= 40 ? "Shaky — run these snippets in psql and read the errors." :
                        "Start again: write, run and break each query yourself.";
+    if (isMalpractice()) {
+      $("#res-verdict").textContent = "Recorded as malpractice: " + violationSummary() + ".";
+    }
 
     renderTopics();
     renderReview();
@@ -577,8 +583,12 @@
       accuracy: accuracy,
       bestStreak: S.bestStreak,
       leftPageCount: S.leftPageCount,
-      fullscreenExits: S.exitCount,
-      malpractice: S.terminated ? "YES" : "NO",
+      malpractice: isMalpractice(),
+      violations: totalViolations(),
+      screenExits: S.v.exits,
+      resizes: S.v.resizes,
+      inspectAttempts: S.v.inspect,
+      automatedClicks: S.v.automation,
       malpracticeReason: S.malReason,
       screenBaseline: describeBaseline(),
       timeTakenSec: +totalSecs.toFixed(1),
@@ -603,8 +613,12 @@
       skipped: S.skipped,
       score: S.score,
       leftPageCount: S.leftPageCount,
-      fullscreenExits: S.exitCount,
-      malpracticeReason: S.malReason,
+      malpractice: isMalpractice(),
+      violations: totalViolations(),
+      screenExits: S.v.exits,
+      resizes: S.v.resizes,
+      inspectAttempts: S.v.inspect,
+      automatedClicks: S.v.automation,
       progressPct: S.deck.length ? Math.round((S.log.length / S.deck.length) * 100) : 0,
       elapsedSec: S.startedAt ? +((Date.now() - S.startedAt) / 1000).toFixed(1) : 0,
       clientTime: new Date().toISOString()
@@ -794,13 +808,24 @@
   // collapsing address bar changes the height, so only the width is checked.
   const enforceFs = () => CONFIG.FULLSCREEN_ON_START && fsSupported();
 
+  const sizeKey = () => { const c = measure(); return c.pw + "x" + c.ph + "/" + c.sw + "x" + c.sh; };
+
+  /* Counts each settled size change once. Entering and leaving fullscreen
+     resize the window too, but those go through afterSettle(), which only
+     records the new size — they are counted as exits, not resizes. */
   function checkSize() {
     if (!CONFIG.PROCTORING || !roundIsLive() || !S.baseline) return;
-    if (enforceFs() && !isFullscreen()) return;          // an exit, not a resize
     const wait = S.settlingUntil - Date.now();
     if (wait > 0) { clearTimeout(S.resizeTimer); S.resizeTimer = setTimeout(checkSize, wait + 50); return; }
-    const why = sizeChanged();
-    if (why) malpractice("Screen size changed during the exam: " + why + ".");
+    const key = sizeKey();
+    if (key === S.lastSizeKey) return;
+    S.lastSizeKey = key;
+    if (isFullscreen() || !enforceFs()) {
+      const why = sizeChanged();
+      if (why) violation("resizes", "The screen size changed: " + why + ". Close anything opened beside the exam.");
+    } else {
+      violation("resizes", "The exam window was resized, minimised or maximised.");
+    }
   }
 
   function onResize() {
@@ -808,34 +833,56 @@
     S.resizeTimer = setTimeout(checkSize, 600);
   }
 
-  /* One exit is one exit: pressing Esc to switch tabs fires fullscreenchange,
-     blur and visibilitychange together, so events 1.5 s apart are merged. */
-  function registerExit(message) {
-    if (!roundIsLive()) return;
-    const now = Date.now();
-    if (now - S.lastExitAt > 1500) {
-      S.exitCount++;
-      sendProgress("left-fullscreen");
-    }
-    S.lastExitAt = now;
-    renderExits();
+  const totalViolations = () => S.v.exits + S.v.resizes + S.v.inspect + S.v.automation;
+  const isMalpractice = () => totalViolations() >= CONFIG.MALPRACTICE_LIMIT;
 
-    if (CONFIG.MAX_EXITS && S.exitCount > CONFIG.MAX_EXITS) {
-      malpractice("Left the exam screen " + S.exitCount + " times (limit " + CONFIG.MAX_EXITS + ").");
-      return;
+  /* Every violation is shown to the student, counted, and the round goes on.
+     Reaching MALPRACTICE_LIMIT marks the attempt as malpractice. */
+  function violation(kind, message) {
+    if (!CONFIG.PROCTORING || !roundIsLive()) return;
+    // One exit is one exit: Esc-to-switch-tabs fires fullscreenchange, blur
+    // and visibilitychange together, so exits 1.5 s apart are merged.
+    if (kind === "exits") {
+      const now = Date.now(), dup = now - S.lastExitAt < 1500;
+      S.lastExitAt = now;
+      if (dup) { showGuard(message); return; }
     }
+    S.v[kind]++;
+    const reached = isMalpractice() && !S.malReason;
+    if (reached) {
+      S.malReason = "Reached " + totalViolations() + " violations — " + violationSummary() + ".";
+    }
+    renderViolations();
+    sendProgress(reached ? "malpractice" : "violation");
+
+    if (reached && CONFIG.END_AT_LIMIT) { endForMalpractice(); return; }
     showGuard(message);
   }
 
-  function renderExits() {
-    $("#stat-exits").textContent = S.exitCount;
-    $("#hstat-exits").classList.toggle("is-alert", S.exitCount > 0);
+  function violationSummary() {
+    return "screen exits " + S.v.exits + ", resizes " + S.v.resizes +
+           ", inspect attempts " + S.v.inspect + ", automated clicks " + S.v.automation;
+  }
+
+  function renderViolations() {
+    const n = totalViolations();
+    $("#stat-exits").textContent = n + "/" + CONFIG.MALPRACTICE_LIMIT;
+    $("#hstat-exits").classList.toggle("is-alert", n > 0);
   }
 
   function showGuard(message) {
+    const n = totalViolations();
+    $("#guard-title").textContent = isMalpractice() ? "Marked as malpractice" : "Warning " + n + " of " + CONFIG.MALPRACTICE_LIMIT;
     $("#guard-msg").textContent = message;
-    $("#guard-count").textContent = S.exitCount;
-    $("#guard-limit").textContent = CONFIG.MAX_EXITS ? "of " + CONFIG.MAX_EXITS + " allowed" : "";
+    $("#guard-count").textContent = n;
+    $("#guard-limit").textContent = "of " + CONFIG.MALPRACTICE_LIMIT;
+    $("#g-exits").textContent = S.v.exits;
+    $("#g-resizes").textContent = S.v.resizes;
+    $("#g-inspect").textContent = S.v.inspect;
+    $("#g-auto").textContent = S.v.automation;
+    $("#guard-note").textContent = isMalpractice()
+      ? "This attempt is recorded as malpractice. You may finish the test, and your instructor will review it."
+      : "At " + CONFIG.MALPRACTICE_LIMIT + " violations the attempt is recorded as malpractice. The clock is still running.";
     $("#guard-btn").textContent = enforceFs() && !isFullscreen() ? "Return to fullscreen" : "Back to the question";
     $("#guard").hidden = false;
     $("#guard-btn").focus();
@@ -844,10 +891,18 @@
   function hideGuard() { $("#guard").hidden = true; }
 
   function onGuardButton() {
-    if (!enforceFs() || isFullscreen()) { hideGuard(); checkSize(); return; }
+    if (!enforceFs() || isFullscreen()) { hideGuard(); return; }
     // The overlay stays up until fullscreen is back and the size re-checked.
     enterFullscreen().catch(() => {
       $("#guard-msg").textContent = "The browser refused fullscreen. Click the button again.";
+    });
+  }
+
+  // Record the size a fullscreen transition lands on without counting it.
+  function settleTransition(then) {
+    afterSettle(() => {
+      if (!roundIsLive()) return;
+      if (then) then(); else S.lastSizeKey = sizeKey();
     });
   }
 
@@ -857,21 +912,22 @@
         S.awaitingFs = false;
         afterSettle(beginRound);
       } else if (roundIsLive()) {                         // back after an exit
-        afterSettle(() => {
-          if (!roundIsLive()) return;
-          checkSize();
-          if (!S.terminated && isFullscreen()) hideGuard();
+        settleTransition(() => {
+          checkSize();                                    // back, but smaller? that is a resize
+          if (isFullscreen()) hideGuard();
         });
       }
       return;
     }
-    if (roundIsLive()) registerExit("You left fullscreen. The question is hidden until you return.");
+    if (!roundIsLive()) return;
+    settleTransition();
+    violation("exits", "You left fullscreen. The question is hidden until you return.");
   }
 
   function onBlur() {
     // The Esc-then-click case is already handled by fullscreenchange; this
     // catches Cmd/Alt+Tab and undocked developer tools taking focus.
-    if (roundIsLive()) registerExit("The exam window lost focus — another app or window was opened.");
+    violation("exits", "The exam window lost focus — another app or window was opened.");
   }
 
   const DEVTOOLS_KEYS = (e) => {
@@ -882,30 +938,22 @@
       (e.ctrlKey && !e.shiftKey && k === "u");               // view source
   };
 
-  function malpractice(reason) {
+  // Only used when END_AT_LIMIT is on: stops the round at the limit.
+  function endForMalpractice() {
     if (S.terminated || !roundIsLive()) return;
     const totalSecs = (Date.now() - S.startedAt) / 1000;
     S.terminated = true;
-    S.malReason = reason;
     S.locked = true;
-    S.finished = true;               // stops the abandon beacon and exit counting
+    S.finished = true;               // stops the abandon beacon and further counting
     stopTimer();
     clearTimeout(S.resizeTimer);
     hideGuard();
 
-    if (CONFIG.LOCK_AFTER_MALPRACTICE) {
-      try {
-        const list = JSON.parse(localStorage.getItem("pgdbg_blocked") || "[]");
-        list.push({ enrolment: S.player.enrolment.toLowerCase(), reason: reason, at: new Date().toISOString() });
-        localStorage.setItem("pgdbg_blocked", JSON.stringify(list.slice(-50)));
-      } catch (e) { /* storage blocked — the sheet still has the record */ }
-    }
-
-    $("#term-reason").textContent = reason;
+    $("#term-reason").textContent = S.malReason;
     $("#term-who").textContent = S.player.name + " · Section " + S.player.section + " · " + S.player.enrolment;
     $("#term-where").textContent = "Question " + Math.min(S.i + 1, S.deck.length) + " of " + S.deck.length +
       " · " + S.correct + " correct so far";
-    $("#term-exits").textContent = String(S.exitCount);
+    $("#term-exits").textContent = violationSummary();
     $("#term-screen").textContent = describeBaseline() || "not measured";
     show("#screen-terminated");
     exitFullscreen();
@@ -913,14 +961,6 @@
     const accuracy = S.deck.length ? Math.round((S.correct / S.deck.length) * 100) : 0;
     if (CONFIG.PROGRESS_TRACKING) sendProgress("terminated");
     submitResult(buildPayload(accuracy, totalSecs));
-  }
-
-  function isBlocked(enrolment) {
-    if (!CONFIG.LOCK_AFTER_MALPRACTICE) return false;
-    try {
-      const list = JSON.parse(localStorage.getItem("pgdbg_blocked") || "[]");
-      return list.some((b) => b.enrolment === enrolment.toLowerCase());
-    } catch (e) { return false; }
   }
 
   /* -------------------------------- start -------------------------------- */
@@ -941,10 +981,6 @@
         showFormError(CONFIG.ENROLMENT_HINT || "That enrolment number does not look right.");
         return;
       }
-    }
-    if (isBlocked(enrolment)) {
-      showFormError("This enrolment number's attempt was ended for malpractice. Please speak to the invigilator.");
-      return;
     }
     showFormError("");
 
@@ -988,21 +1024,21 @@
     S.hidden = false;
     S.leftPageCount = 0;
     S.abandonSent = false;
-    S.exitCount = 0; S.lastExitAt = 0;
+    S.v = { exits: 0, resizes: 0, inspect: 0, automation: 0 };
+    S.lastExitAt = 0; S.lastSizeKey = sizeKey();
     S.terminated = false; S.malReason = "";
     S.startedAt = Date.now();
-    renderExits();
+    renderViolations();
     hideGuard();
 
     $("#q-total").textContent = S.deck.length;
     show("#screen-quiz");
     if (CONFIG.PROGRESS_TRACKING) sendProgress("started");
 
-    if (CONFIG.PROCTORING && navigator.webdriver) {
-      malpractice("The browser is being controlled by automation software (webdriver).");
-      return;
-    }
     renderQuestion();
+    if (navigator.webdriver) {
+      violation("automation", "This browser is being controlled by automation software.");
+    }
   }
 
   function showFormError(msg) {
@@ -1070,9 +1106,9 @@
     document.addEventListener("keydown", (e) => {
       if (CONFIG.PROCTORING && roundIsLive() && DEVTOOLS_KEYS(e)) {
         e.preventDefault();
-        malpractice("A developer-tools shortcut (" + [e.ctrlKey && "Ctrl", e.metaKey && "Cmd",
+        violation("inspect", "Opening Inspect / developer tools (" + [e.ctrlKey && "Ctrl", e.metaKey && "Cmd",
           e.altKey && "Alt", e.shiftKey && "Shift", e.key.length === 1 ? e.key.toUpperCase() : e.key]
-          .filter(Boolean).join("+") + ") was pressed during the exam.");
+          .filter(Boolean).join("+") + ") is not allowed during the exam.");
         return;
       }
       if (!$("#screen-quiz").classList.contains("is-active") || S.locked) return;
@@ -1082,13 +1118,17 @@
       if (k in map && map[k] < S.deck[S.i].o.length) { e.preventDefault(); answer(map[k], e); }
     });
 
-    // Proctoring: exits are counted, size changes and devtools end the round.
+    // Proctoring: exits, size changes, devtools and scripted clicks are counted.
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
     window.addEventListener("resize", onResize);
     window.addEventListener("blur", onBlur);
     // No right-click menu mid-round, so "Inspect" is one step further away.
-    document.addEventListener("contextmenu", (e) => { if (roundIsLive()) e.preventDefault(); });
+    document.addEventListener("contextmenu", (e) => {
+      if (!roundIsLive()) return;
+      e.preventDefault();
+      violation("inspect", "Right-click is disabled during the exam (it opens Inspect).");
+    });
 
     // Leaving mid-round records where the student got to. pagehide is the
     // reliable one on iOS Safari; visibilitychange covers tab switches.
@@ -1096,7 +1136,7 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") {
         onHidden();
-        registerExit("You switched to another tab or window.");
+        violation("exits", "You switched tab, minimised the window, or opened another app.");
       } else onVisible();
     });
 
