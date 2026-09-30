@@ -35,13 +35,14 @@ var HEADERS = [
   'Timestamp', 'Attempt ID', 'Name', 'Section', 'Enrolment No', 'IP Address',
   'Score', 'Total Questions', 'Answered', 'Correct', 'Wrong', 'Timed Out',
   'Accuracy %', 'Best Streak', 'Left Page', 'Time Taken (s)', 'Avg per Q (s)',
-  'Topic Breakdown', 'Client Time', 'User Agent'
+  'Topic Breakdown', 'Client Time', 'User Agent',
+  'Fullscreen Exits', 'Malpractice', 'Malpractice Reason', 'Screen on Entry'
 ];
 
 var LIVE_HEADERS = [
   'Attempt ID', 'Last Update', 'Name', 'Section', 'Enrolment No', 'IP Address',
   'Status', 'Answered', 'Total', 'Progress %', 'Correct', 'Wrong', 'Timed Out',
-  'Score', 'Left Page', 'Elapsed (s)'
+  'Score', 'Left Page', 'Elapsed (s)', 'Fullscreen Exits', 'Malpractice Reason'
 ];
 
 var DETAIL_HEADERS = [
@@ -64,7 +65,9 @@ function setup() {
 
 function initSheet(ss, name, headers) {
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  // Rewriting the header row adds columns introduced by later versions.
   if (sheet.getLastRow() === 0) sheet.appendRow(headers);
+  else sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length)
     .setFontWeight('bold').setBackground('#0d1220').setFontColor('#ffffff');
   sheet.setFrozenRows(1);
@@ -113,7 +116,11 @@ function saveResult(body) {
       num(body.leftPageCount), num(body.timeTakenSec), num(body.avgSecPerQ),
       body.topicBreakdown || '',
       body.clientTime || '',
-      body.userAgent || ''
+      body.userAgent || '',
+      num(body.fullscreenExits),
+      body.malpractice || 'NO',
+      body.malpracticeReason || '',
+      body.screenBaseline || ''
     ]);
 
     if (DETAIL_NAME && body.answers && body.answers.length) {
@@ -156,16 +163,17 @@ function saveProgress(body) {
       body.ip || '', body.status || 'in-progress',
       num(body.answered), num(body.total), num(body.progressPct),
       num(body.correct), num(body.wrong), num(body.skipped),
-      num(body.score), num(body.leftPageCount), num(body.elapsedSec)
+      num(body.score), num(body.leftPageCount), num(body.elapsedSec),
+      num(body.fullscreenExits), body.malpracticeReason || ''
     ];
 
     var target = findRowByAttemptId(sheet, id);
 
-    // Never let a late "abandoned" beacon overwrite a completed round.
+    // Never let a late "abandoned" beacon overwrite a finished round.
     if (target > 0) {
       var current = sheet.getRange(target, 7).getValue();
-      if (current === 'completed' && body.status !== 'completed') {
-        return json({ ok: true, skipped: 'already completed' });
+      if ((current === 'completed' || current === 'terminated') && body.status !== current) {
+        return json({ ok: true, skipped: 'already ' + current });
       }
       sheet.getRange(target, 1, 1, LIVE_HEADERS.length).setValues([row]);
     } else {
@@ -215,7 +223,7 @@ function leaderboard(limit) {
   var best = {};
   values.forEach(function (r) {
     var key = String(r[4] || r[2] || '').toLowerCase().trim();   // enrolment, else name
-    if (!key) return;
+    if (!key || r[21] === 'YES') return;                         // malpractice: not ranked
     var entry = {
       name: r[2], section: r[3], enrolment: r[4],
       score: Number(r[6]) || 0,

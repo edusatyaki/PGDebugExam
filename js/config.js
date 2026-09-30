@@ -11,16 +11,32 @@ const CONFIG = {
 
   /* Branding shown on the start screen */
   QUIZ_TITLE:    "PostgreSQL <i>Debugging</i> Test",
-  QUIZ_SUBTITLE: "75 buggy snippets · 60 seconds each · find what breaks",
+  QUIZ_SUBTITLE: "75 buggy snippets · 90 seconds each · find what breaks",
   FOOTER_NOTE:   "· verified on PostgreSQL 16",
 
-  /* Go fullscreen when the student presses Start. Note that this is a
-     presentation choice, not a lockdown — Esc or F11 leaves it at any time
-     and no web page can prevent that. */
+  /* The round only begins once the browser is in fullscreen. Esc or F11
+     can still leave it (no page can prevent that), so every exit is
+     counted, the question is covered by a warning, and the count is sent
+     to the sheet. Browsers without the Fullscreen API (iPhone Safari) run
+     windowed. */
   FULLSCREEN_ON_START: true,
 
+  /* --------------------------- Proctoring ----------------------------- */
+
+  /* Ends the attempt as malpractice when, during the round:
+       - the fullscreen size differs from the size measured on entry
+         (a docked Inspect panel, split screen, a second display),
+       - a developer-tools shortcut is pressed (F12, Ctrl+Shift+I, Cmd+Opt+I…),
+       - an answer is clicked by a script instead of a real mouse/keyboard,
+       - the browser reports it is driven by automation (Selenium, Playwright).
+     The terminated attempt is still saved to the sheet with the reason. */
+  PROCTORING: true,
+  RESIZE_TOLERANCE_PX: 30,   // size change (CSS px) ignored as noise
+  MAX_EXITS: 0,              // end the attempt after this many exits; 0 = warn only
+  LOCK_AFTER_MALPRACTICE: true,  // refuse a new attempt with the same enrolment in this browser
+
   /* Timing & round settings */
-  SECONDS_PER_QUESTION: 60,   // countdown per question
+  SECONDS_PER_QUESTION: 90,   // countdown per question
   QUESTIONS_PER_ROUND:  75,   // how many of the bank to serve (set 50 for a random 50)
   WARN_AT_SECONDS:      15,   // ring turns amber at this many seconds left
   DANGER_AT_SECONDS:    5,    // ring turns red and pulses

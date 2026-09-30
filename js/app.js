@@ -72,21 +72,27 @@
   const pad = (n) => String(n).padStart(2, "0");
   const mmss = (secs) => pad(Math.floor(secs / 60)) + ":" + pad(Math.floor(secs % 60));
 
-  /* Fullscreen is a presentation choice, not a lockdown: Esc and F11 always
-     work and no page can prevent that. Requests must come from a user
-     gesture, which is why this is only ever called from the Start handler. */
+  /* Esc and F11 always leave fullscreen and no page can prevent that, so the
+     proctoring below counts exits rather than trying to block them. Requests
+     must come from a user gesture: the Start button or the warning's
+     "Return to fullscreen" button. */
+  const fsSupported = () => Boolean(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const isFullscreen = () => Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+
+  // Resolves when the request is accepted; rejects when it is refused.
   function enterFullscreen() {
     const el = document.documentElement;
     const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
-    if (!req) return;
+    if (!req) return Promise.reject(new Error("unsupported"));
     try {
-      const p = req.call(el, { navigationUI: "hide" });
-      if (p && p.catch) p.catch(() => {});   // denied or unsupported: carry on
-    } catch (e) { /* older Safari throws instead of rejecting */ }
+      return Promise.resolve(req.call(el, { navigationUI: "hide" }));
+    } catch (e) {
+      return Promise.reject(e);             // older Safari throws instead of rejecting
+    }
   }
 
   function exitFullscreen() {
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) return;
+    if (!isFullscreen()) return;
     const done = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
     if (!done) return;
     try {
@@ -121,7 +127,17 @@
     raf: null,
     hidden: false,        // is the tab currently backgrounded?
     leftPageCount: 0,     // how many times they navigated away mid-round
-    abandonSent: false
+    abandonSent: false,
+
+    // proctoring
+    awaitingFs: false,    // Start pressed, waiting for fullscreen to take effect
+    baseline: null,       // screen + viewport measured on first fullscreen entry
+    exitCount: 0,         // exits from fullscreen / the window, deduplicated
+    lastExitAt: 0,
+    settlingUntil: 0,     // ignore resizes while a fullscreen transition animates
+    resizeTimer: null,
+    terminated: false,
+    malReason: ""
   };
 
   const RING_LEN = 2 * Math.PI * 52; // r=52 in the SVG
@@ -241,7 +257,7 @@
       btn.innerHTML =
         '<span class="option-key">' + letters[idx] + "</span>" +
         '<span class="option-text">' + fmt(text) + "</span>";
-      btn.addEventListener("click", () => answer(idx));
+      btn.addEventListener("click", (e) => answer(idx, e));
       box.appendChild(btn);
     });
 
@@ -250,8 +266,14 @@
   }
 
   /* ------------------------------ answering ------------------------------ */
-  function answer(chosen) {
+  function answer(chosen, ev) {
     if (S.locked) return;
+    // A real mouse, touch or key press is always trusted. el.click() or
+    // dispatchEvent() from the console, a bookmarklet or an extension is not.
+    if (CONFIG.PROCTORING && ev && !ev.isTrusted) {
+      malpractice("An answer was clicked automatically by a script, not by the student.");
+      return;
+    }
     S.locked = true;
     stopTimer();
 
@@ -317,6 +339,7 @@
   }
 
   function next() {
+    if (S.terminated) return;
     S.i++;
     if (S.i >= S.deck.length) return finish();
     if (CONFIG.PROGRESS_TRACKING && S.i % CONFIG.PROGRESS_EVERY === 0) sendProgress("in-progress");
@@ -325,6 +348,7 @@
 
   /* ------------------------------- results ------------------------------- */
   function finish() {
+    if (S.terminated) return;
     stopTimer();
     S.finished = true;
     const totalSecs = (Date.now() - S.startedAt) / 1000;
@@ -553,6 +577,10 @@
       accuracy: accuracy,
       bestStreak: S.bestStreak,
       leftPageCount: S.leftPageCount,
+      fullscreenExits: S.exitCount,
+      malpractice: S.terminated ? "YES" : "NO",
+      malpracticeReason: S.malReason,
+      screenBaseline: describeBaseline(),
       timeTakenSec: +totalSecs.toFixed(1),
       avgSecPerQ: +(totalSecs / S.deck.length).toFixed(2),
       topicBreakdown: topicSummary,
@@ -575,6 +603,8 @@
       skipped: S.skipped,
       score: S.score,
       leftPageCount: S.leftPageCount,
+      fullscreenExits: S.exitCount,
+      malpracticeReason: S.malReason,
       progressPct: S.deck.length ? Math.round((S.log.length / S.deck.length) * 100) : 0,
       elapsedSec: S.startedAt ? +((Date.now() - S.startedAt) / 1000).toFixed(1) : 0,
       clientTime: new Date().toISOString()
@@ -632,7 +662,7 @@
   }
 
   function setSaveStatus(cls, text) {
-    const el = $("#save-status");
+    const el = $(S.terminated ? "#term-save" : "#save-status");
     el.className = "save-status " + cls;
     el.textContent = text;
   }
@@ -710,8 +740,192 @@
       .catch(() => { box.innerHTML = '<p class="muted">Leaderboard unavailable.</p>'; });
   }
 
+  /* ------------------------------ proctoring ------------------------------ */
+  /* Measured in device pixels (CSS px x devicePixelRatio) so that browser
+     zoom, which changes CSS px but not the physical screen, is not flagged. */
+  function measure() {
+    const dpr = window.devicePixelRatio || 1;
+    return {
+      vw: window.innerWidth, vh: window.innerHeight,
+      pw: Math.round(window.innerWidth * dpr), ph: Math.round(window.innerHeight * dpr),
+      sw: screen.width, sh: screen.height, dpr: dpr
+    };
+  }
+
+  function describeBaseline() {
+    const b = S.baseline;
+    if (!b) return "";
+    return "screen " + b.sw + "x" + b.sh + " · viewport " + b.vw + "x" + b.vh + " @" + b.dpr + "x";
+  }
+
+  // Wait until the fullscreen animation has stopped resizing the window.
+  function afterSettle(fn) {
+    S.settlingUntil = Date.now() + 2500;
+    let quiet = null;
+    const cap = setTimeout(done, 2500);
+    function done() {
+      clearTimeout(quiet); clearTimeout(cap);
+      removeEventListener("resize", kick);
+      S.settlingUntil = 0;
+      fn();
+    }
+    function kick() { clearTimeout(quiet); quiet = setTimeout(done, 450); }
+    addEventListener("resize", kick);
+    kick();
+  }
+
+  /* Compares the current size with the one measured on entry. A docked
+     Inspect panel, split screen or moving to another display all change it.
+     Rotating a phone swaps width and height, which is allowed. */
+  function sizeChanged() {
+    const b = S.baseline, c = measure();
+    const tol = CONFIG.RESIZE_TOLERANCE_PX * b.dpr;
+    const off = (w, h) => Math.abs(c.pw - w) > tol || (enforceFs() && Math.abs(c.ph - h) > tol);
+    const screenOff = !((c.sw === b.sw && c.sh === b.sh) || (c.sw === b.sh && c.sh === b.sw));
+    if (screenOff) return "the screen changed from " + b.sw + "x" + b.sh + " to " + c.sw + "x" + c.sh;
+    if (off(b.pw, b.ph) && off(b.ph, b.pw)) {
+      return "the exam window changed from " + b.vw + "x" + b.vh + " to " + c.vw + "x" + c.vh +
+             " (developer tools or another window opened beside it)";
+    }
+    return "";
+  }
+
+  // Without the Fullscreen API (iPhone) the round runs windowed, and the
+  // collapsing address bar changes the height, so only the width is checked.
+  const enforceFs = () => CONFIG.FULLSCREEN_ON_START && fsSupported();
+
+  function checkSize() {
+    if (!CONFIG.PROCTORING || !roundIsLive() || !S.baseline) return;
+    if (enforceFs() && !isFullscreen()) return;          // an exit, not a resize
+    const wait = S.settlingUntil - Date.now();
+    if (wait > 0) { clearTimeout(S.resizeTimer); S.resizeTimer = setTimeout(checkSize, wait + 50); return; }
+    const why = sizeChanged();
+    if (why) malpractice("Screen size changed during the exam: " + why + ".");
+  }
+
+  function onResize() {
+    clearTimeout(S.resizeTimer);
+    S.resizeTimer = setTimeout(checkSize, 600);
+  }
+
+  /* One exit is one exit: pressing Esc to switch tabs fires fullscreenchange,
+     blur and visibilitychange together, so events 1.5 s apart are merged. */
+  function registerExit(message) {
+    if (!roundIsLive()) return;
+    const now = Date.now();
+    if (now - S.lastExitAt > 1500) {
+      S.exitCount++;
+      sendProgress("left-fullscreen");
+    }
+    S.lastExitAt = now;
+    renderExits();
+
+    if (CONFIG.MAX_EXITS && S.exitCount > CONFIG.MAX_EXITS) {
+      malpractice("Left the exam screen " + S.exitCount + " times (limit " + CONFIG.MAX_EXITS + ").");
+      return;
+    }
+    showGuard(message);
+  }
+
+  function renderExits() {
+    $("#stat-exits").textContent = S.exitCount;
+    $("#hstat-exits").classList.toggle("is-alert", S.exitCount > 0);
+  }
+
+  function showGuard(message) {
+    $("#guard-msg").textContent = message;
+    $("#guard-count").textContent = S.exitCount;
+    $("#guard-limit").textContent = CONFIG.MAX_EXITS ? "of " + CONFIG.MAX_EXITS + " allowed" : "";
+    $("#guard-btn").textContent = enforceFs() && !isFullscreen() ? "Return to fullscreen" : "Back to the question";
+    $("#guard").hidden = false;
+    $("#guard-btn").focus();
+  }
+
+  function hideGuard() { $("#guard").hidden = true; }
+
+  function onGuardButton() {
+    if (!enforceFs() || isFullscreen()) { hideGuard(); checkSize(); return; }
+    // The overlay stays up until fullscreen is back and the size re-checked.
+    enterFullscreen().catch(() => {
+      $("#guard-msg").textContent = "The browser refused fullscreen. Click the button again.";
+    });
+  }
+
+  function onFullscreenChange() {
+    if (isFullscreen()) {
+      if (S.awaitingFs) {                                 // first entry: measure, then begin
+        S.awaitingFs = false;
+        afterSettle(beginRound);
+      } else if (roundIsLive()) {                         // back after an exit
+        afterSettle(() => {
+          if (!roundIsLive()) return;
+          checkSize();
+          if (!S.terminated && isFullscreen()) hideGuard();
+        });
+      }
+      return;
+    }
+    if (roundIsLive()) registerExit("You left fullscreen. The question is hidden until you return.");
+  }
+
+  function onBlur() {
+    // The Esc-then-click case is already handled by fullscreenchange; this
+    // catches Cmd/Alt+Tab and undocked developer tools taking focus.
+    if (roundIsLive()) registerExit("The exam window lost focus — another app or window was opened.");
+  }
+
+  const DEVTOOLS_KEYS = (e) => {
+    const k = e.key.toLowerCase();
+    return e.key === "F12" ||
+      (e.ctrlKey && e.shiftKey && ["i", "j", "c", "k"].includes(k)) ||
+      (e.metaKey && e.altKey && ["i", "j", "c", "u"].includes(k)) ||
+      (e.ctrlKey && !e.shiftKey && k === "u");               // view source
+  };
+
+  function malpractice(reason) {
+    if (S.terminated || !roundIsLive()) return;
+    const totalSecs = (Date.now() - S.startedAt) / 1000;
+    S.terminated = true;
+    S.malReason = reason;
+    S.locked = true;
+    S.finished = true;               // stops the abandon beacon and exit counting
+    stopTimer();
+    clearTimeout(S.resizeTimer);
+    hideGuard();
+
+    if (CONFIG.LOCK_AFTER_MALPRACTICE) {
+      try {
+        const list = JSON.parse(localStorage.getItem("pgdbg_blocked") || "[]");
+        list.push({ enrolment: S.player.enrolment.toLowerCase(), reason: reason, at: new Date().toISOString() });
+        localStorage.setItem("pgdbg_blocked", JSON.stringify(list.slice(-50)));
+      } catch (e) { /* storage blocked — the sheet still has the record */ }
+    }
+
+    $("#term-reason").textContent = reason;
+    $("#term-who").textContent = S.player.name + " · Section " + S.player.section + " · " + S.player.enrolment;
+    $("#term-where").textContent = "Question " + Math.min(S.i + 1, S.deck.length) + " of " + S.deck.length +
+      " · " + S.correct + " correct so far";
+    $("#term-exits").textContent = String(S.exitCount);
+    $("#term-screen").textContent = describeBaseline() || "not measured";
+    show("#screen-terminated");
+    exitFullscreen();
+
+    const accuracy = S.deck.length ? Math.round((S.correct / S.deck.length) * 100) : 0;
+    if (CONFIG.PROGRESS_TRACKING) sendProgress("terminated");
+    submitResult(buildPayload(accuracy, totalSecs));
+  }
+
+  function isBlocked(enrolment) {
+    if (!CONFIG.LOCK_AFTER_MALPRACTICE) return false;
+    try {
+      const list = JSON.parse(localStorage.getItem("pgdbg_blocked") || "[]");
+      return list.some((b) => b.enrolment === enrolment.toLowerCase());
+    } catch (e) { return false; }
+  }
+
   /* -------------------------------- start -------------------------------- */
   function startQuiz() {
+    if (S.awaitingFs) return;
     const name      = $("#in-name").value.trim();
     const section   = $("#in-section").value.trim();
     const enrolment = $("#in-enrolment").value.trim();
@@ -728,9 +942,44 @@
         return;
       }
     }
+    if (isBlocked(enrolment)) {
+      showFormError("This enrolment number's attempt was ended for malpractice. Please speak to the invigilator.");
+      return;
+    }
     showFormError("");
 
     S.player = { name: name, section: section, enrolment: enrolment };
+
+    if (!enforceFs()) { S.baseline = measure(); beginRound(); return; }
+
+    // The round begins in onFullscreenChange, once the size has settled and
+    // been measured — the clock never runs before the screen is locked in.
+    S.awaitingFs = true;
+    const btn = $("#btn-start");
+    btn.disabled = true;
+    btn.textContent = "Entering fullscreen…";
+    const refused = () => {
+      if (!S.awaitingFs) return;
+      S.awaitingFs = false;
+      btn.disabled = false;
+      btn.innerHTML = "▶&nbsp; Start the round";
+      showFormError("The test must run in fullscreen. Allow fullscreen and press Start again.");
+    };
+    enterFullscreen().catch(refused);
+    setTimeout(() => { if (!isFullscreen()) refused(); }, 4000);
+  }
+
+  function beginRound() {
+    const btn = $("#btn-start");
+    btn.disabled = false;
+    btn.innerHTML = "▶&nbsp; Start the round";
+    if (enforceFs() && !isFullscreen()) {                 // left again before it began
+      showFormError("The test must run in fullscreen. Press Start again and stay in fullscreen.");
+      return;
+    }
+
+    // First fullscreen entry: this is the size every later check compares to.
+    S.baseline = measure();
     S.attemptId = uuid();
     S.deck = buildDeck();
     S.i = 0; S.score = 0; S.streak = 0; S.bestStreak = 0;
@@ -739,13 +988,20 @@
     S.hidden = false;
     S.leftPageCount = 0;
     S.abandonSent = false;
+    S.exitCount = 0; S.lastExitAt = 0;
+    S.terminated = false; S.malReason = "";
     S.startedAt = Date.now();
-
-    if (CONFIG.FULLSCREEN_ON_START) enterFullscreen();
+    renderExits();
+    hideGuard();
 
     $("#q-total").textContent = S.deck.length;
     show("#screen-quiz");
     if (CONFIG.PROGRESS_TRACKING) sendProgress("started");
+
+    if (CONFIG.PROCTORING && navigator.webdriver) {
+      malpractice("The browser is being controlled by automation software (webdriver).");
+      return;
+    }
     renderQuestion();
   }
 
@@ -757,8 +1013,10 @@
 
   function restart() {
     stopTimer();
+    hideGuard();
     S.attemptId = "";
     S.startedAt = 0;
+    S.baseline = null;
     if (CONFIG.FULLSCREEN_ON_START) exitFullscreen();
     show("#screen-start");
   }
@@ -799,6 +1057,7 @@
     $("#in-enrolment").addEventListener("keydown", (e) => { if (e.key === "Enter") startQuiz(); });
     $("#btn-retry").addEventListener("click", restart);
     $("#btn-review-again").addEventListener("click", restart);
+    $("#guard-btn").addEventListener("click", onGuardButton);
 
     $("#review-toggle").addEventListener("click", () => {
       const panel = $("#review-list");
@@ -809,17 +1068,36 @@
 
     // Keyboard: 1–4 or A–D pick an option.
     document.addEventListener("keydown", (e) => {
+      if (CONFIG.PROCTORING && roundIsLive() && DEVTOOLS_KEYS(e)) {
+        e.preventDefault();
+        malpractice("A developer-tools shortcut (" + [e.ctrlKey && "Ctrl", e.metaKey && "Cmd",
+          e.altKey && "Alt", e.shiftKey && "Shift", e.key.length === 1 ? e.key.toUpperCase() : e.key]
+          .filter(Boolean).join("+") + ") was pressed during the exam.");
+        return;
+      }
       if (!$("#screen-quiz").classList.contains("is-active") || S.locked) return;
+      if (!$("#guard").hidden) return;                      // no answering blind
       const k = e.key.toLowerCase();
       const map = { "1": 0, "2": 1, "3": 2, "4": 3, a: 0, b: 1, c: 2, d: 3 };
-      if (k in map && map[k] < S.deck[S.i].o.length) { e.preventDefault(); answer(map[k]); }
+      if (k in map && map[k] < S.deck[S.i].o.length) { e.preventDefault(); answer(map[k], e); }
     });
+
+    // Proctoring: exits are counted, size changes and devtools end the round.
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("blur", onBlur);
+    // No right-click menu mid-round, so "Inspect" is one step further away.
+    document.addEventListener("contextmenu", (e) => { if (roundIsLive()) e.preventDefault(); });
 
     // Leaving mid-round records where the student got to. pagehide is the
     // reliable one on iOS Safari; visibilitychange covers tab switches.
     window.addEventListener("pagehide", sendAbandon);
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") onHidden(); else onVisible();
+      if (document.visibilityState === "hidden") {
+        onHidden();
+        registerExit("You switched to another tab or window.");
+      } else onVisible();
     });
 
     flushPending();

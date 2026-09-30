@@ -1,6 +1,6 @@
 # PostgreSQL Debugging Test
 
-A static MCQ test on **debugging PostgreSQL code: 75 questions, 4 options each, 60 seconds per question**, no going back.
+A static MCQ test on **debugging PostgreSQL code: 75 questions, 4 options each, 90 seconds per question**, no going back.
 Built on the same engine and design as [DBMSExam](https://github.com/edusatyaki/DBMSExam). Runs entirely on GitHub Pages;
 results are written to a Google Sheet through a Google Apps Script web app.
 
@@ -152,8 +152,12 @@ Everything lives in `js/config.js`:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `FULLSCREEN_ON_START` | `true` | Go fullscreen when the student presses Start |
-| `SECONDS_PER_QUESTION` | `60` | Countdown per question |
+| `FULLSCREEN_ON_START` | `true` | The round only begins once the browser is in fullscreen |
+| `PROCTORING` | `true` | Count exits and end the attempt on malpractice (see below) |
+| `RESIZE_TOLERANCE_PX` | `30` | Size change ignored as noise |
+| `MAX_EXITS` | `0` | End the attempt after this many exits; `0` = warn only |
+| `LOCK_AFTER_MALPRACTICE` | `true` | Refuse a new attempt with the same enrolment in that browser |
+| `SECONDS_PER_QUESTION` | `90` | Countdown per question |
 | `WARN_AT_SECONDS` / `DANGER_AT_SECONDS` | `15` / `5` | When the ring turns amber / red |
 | `QUESTIONS_PER_ROUND` | `75` | Set `50` to give each student a random 50 of the 75 |
 | `SHUFFLE_QUESTIONS` | `true` | Randomise the order per attempt |
@@ -219,10 +223,24 @@ psql -d scratch -X -f verify/verify.sql
   `js/questions.js` and read `a`. That is fine for a classroom test; if you need it to
   be exam-grade, the scoring has to move server-side (send only the picked index to Apps Script and
   grade it there against a private copy of the key).
-- **Fullscreen is presentation, not proctoring.** Pressing Start requests fullscreen, but `Esc` and
-  `F11` leave it at any moment and no web page can prevent that. The browser also only grants the
-  request from a real click or keypress, so it cannot be forced on load. If the request is refused
-  the round starts anyway, windowed. Set `FULLSCREEN_ON_START: false` to skip it.
+- **Proctoring.** Pressing Start requests fullscreen, and the clock does not start until it is
+  granted. The screen and viewport size are measured on that first entry.
+  - *Exits* — `Esc`, switching tabs, or the window losing focus covers the question with a warning
+    showing the exit count. The clock keeps running. The count is shown in the top bar and sent to
+    the `Fullscreen Exits` column.
+  - *Malpractice* — the attempt ends at once, cannot be continued, and is saved with the reason in
+    `Malpractice Reason` when: the fullscreen size changes from the one measured on entry (a docked
+    Inspect panel, split screen, another display); a developer-tools shortcut is pressed (F12,
+    Ctrl+Shift+I/J/C, Cmd+Opt+I/J/C, Ctrl+U); an answer is clicked by a script rather than a real
+    mouse or keyboard (`event.isTrusted`); or the browser reports automation (`navigator.webdriver`).
+    Malpractice attempts are kept off the leaderboard.
+  - *Limits* — `Esc` cannot be blocked by any web page, only counted. Developer tools opened
+    **undocked** from the browser menu don't change the page size, but they take focus, which counts
+    as an exit. OS-level auto-clickers produce real input and can't be told apart. The re-attempt
+    lock lives in `localStorage`, so another browser or cleared site data gets round it — the sheet
+    is the record that counts. iPhone Safari has no Fullscreen API, so there the round runs windowed
+    and only width changes are checked.
+  - After updating `Code.gs`, run `setup()` once so the new header columns are written.
 - **Name, section and enrolment number are self-reported.** Nothing stops a student typing someone
   else's. If that matters, run the round in a supervised session, or put a Google Form sign-in in
   front of it so the identity comes from a Google account instead.
@@ -230,7 +248,7 @@ psql -d scratch -X -f verify/verify.sql
   the CORS preflight that Apps Script cannot answer. If the reply still can't be read, the app falls
   back to a fire-and-forget send, keeps a copy in `localStorage`, and says so on screen rather than
   claiming a save it can't verify. Queued copies are retried the next time the page loads.
-- **No pause.** Switching tabs does not stop the clock — that is deliberate.
+- **No pause.** Leaving fullscreen or switching tabs does not stop the clock — that is deliberate.
 
 ## Troubleshooting
 
