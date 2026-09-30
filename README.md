@@ -157,6 +157,7 @@ Everything lives in `js/config.js`:
 | `MALPRACTICE_LIMIT` | `10` | This many violations marks the attempt as malpractice |
 | `END_AT_LIMIT` | `false` | `true` also stops the test at the limit |
 | `ALARM_SECONDS` | `6` | Siren at the limit and on each violation after it; `0` = silent |
+| `SOUND_CHECK` | `true` | Student plays a test siren and confirms full volume before Start |
 | `RESIZE_TOLERANCE_PX` | `30` | Size change ignored as noise |
 | `SECONDS_PER_QUESTION` | `90` | Countdown per question |
 | `WARN_AT_SECONDS` / `DANGER_AT_SECONDS` | `15` / `5` | When the ring turns amber / red |
@@ -241,6 +242,8 @@ psql -d scratch -X -f verify/verify.sql
   off the leaderboard. A siren sounds for `ALARM_SECONDS` and the warning turns red; it sounds
   again on every later violation. The student may still finish unless `END_AT_LIMIT` is `true`. Students can
   sit the test any number of times; every attempt is its own row.
+  - *Volume* — the siren plays at full scale, the loudest a page can produce, but no website can
+    change or read the laptop's volume or unmute it. That is why Start requires the sound check.
   - *Limits* — `Esc` cannot be blocked by any web page, only counted. Developer tools opened
     **undocked** from the browser menu don't change the page size, but they take focus, which counts
     as a screen exit. OS-level auto-clickers produce real input and can't be told apart. iPhone

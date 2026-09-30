@@ -501,3 +501,12 @@ code{
 .guard.is-alarm #guard-title{color:var(--red)}
 @keyframes alarmBg{50%{background:rgba(185,28,28,.95)}}
 @media (prefers-reduced-motion:reduce){.guard.is-alarm{animation:none}}
+
+.sound-check{
+  margin:0 0 12px;padding:10px 12px;border:1px dashed var(--border-2);border-radius:var(--radius);
+  background:var(--surface-2);display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+}
+.sound-ok{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--ink-2);cursor:pointer}
+.sound-ok input{width:16px;height:16px;accent-color:var(--green)}
+.sound-ok input:disabled + span{color:var(--muted-2)}
+.sound-hint{flex-basis:100%;margin:0;font-size:.74rem;color:var(--muted)}

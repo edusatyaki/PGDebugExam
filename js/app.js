@@ -848,11 +848,11 @@
     } catch (e) { /* no audio on this device — the red warning still shows */ }
   }
 
-  // A rising-and-falling siren, one sweep per second.
-  function soundAlarm() {
-    const secs = CONFIG.ALARM_SECONDS;
-    if (!secs || !audioCtx || Date.now() < alarmUntil) return;   // don't stack sirens
-    alarmUntil = Date.now() + secs * 1000;
+  /* A rising-and-falling siren, one sweep per second, at full scale — the
+     loudest a page can play. The laptop's own volume and mute are outside
+     any website's control, which is what the sound check before Start is for. */
+  function playSiren(secs) {
+    if (!audioCtx) return;
     try {
       audioCtx.resume();
       const t0 = audioCtx.currentTime;
@@ -865,13 +865,28 @@
         osc.frequency.linearRampToValueAtTime(650, t0 + t + 1);
       }
       gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(0.4, t0 + 0.05);
-      gain.gain.setValueAtTime(0.4, t0 + secs - 0.1);
+      gain.gain.exponentialRampToValueAtTime(1, t0 + 0.03);
+      gain.gain.setValueAtTime(1, t0 + secs - 0.05);
       gain.gain.exponentialRampToValueAtTime(0.0001, t0 + secs);
       osc.connect(gain).connect(audioCtx.destination);
       osc.start(t0);
       osc.stop(t0 + secs);
     } catch (e) { /* ignore */ }
+  }
+
+  function soundAlarm() {
+    const secs = CONFIG.ALARM_SECONDS;
+    if (!secs || !audioCtx || Date.now() < alarmUntil) return;   // don't stack sirens
+    alarmUntil = Date.now() + secs * 1000;
+    playSiren(secs);
+  }
+
+  // Start-screen sound check: the student must hear the alarm first.
+  function testSound() {
+    unlockAudio();
+    playSiren(2);
+    $("#in-sound").disabled = false;
+    $("#sound-hint").textContent = "Didn't hear it? Unmute, unplug headphones, turn the volume to full, and play it again.";
   }
 
   const totalViolations = () => S.v.exits + S.v.resizes + S.v.inspect + S.v.automation;
@@ -1029,6 +1044,10 @@
         return;
       }
     }
+    if (CONFIG.SOUND_CHECK && CONFIG.ALARM_SECONDS && !$("#in-sound").checked) {
+      showFormError("Play the test sound with your volume at full, then tick the box.");
+      return;
+    }
     showFormError("");
 
     S.player = { name: name, section: section, enrolment: enrolment };
@@ -1136,6 +1155,8 @@
     lookupIP();
 
     $("#btn-start").addEventListener("click", startQuiz);
+    if (CONFIG.SOUND_CHECK && CONFIG.ALARM_SECONDS) $("#btn-sound").addEventListener("click", testSound);
+    else $("#sound-check").style.display = "none";
     $("#in-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#in-section").focus(); });
     $("#in-enrolment").addEventListener("keydown", (e) => { if (e.key === "Enter") startQuiz(); });
     $("#btn-retry").addEventListener("click", restart);

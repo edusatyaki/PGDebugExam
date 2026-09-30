@@ -35,6 +35,7 @@ const CONFIG = {
   MALPRACTICE_LIMIT: 10,     // this many violations = malpractice
   END_AT_LIMIT: false,       // true = also stop the test at the limit
   ALARM_SECONDS: 6,          // siren length at the limit and each violation after; 0 = silent
+  SOUND_CHECK: true,         // student must play a test siren and confirm full volume before Start
   RESIZE_TOLERANCE_PX: 30,   // size change (CSS px) ignored as noise
 
   /* Timing & round settings */
