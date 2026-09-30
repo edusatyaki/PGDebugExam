@@ -157,7 +157,7 @@ Everything lives in `js/config.js`:
 | `MALPRACTICE_LIMIT` | `10` | This many violations marks the attempt as malpractice |
 | `END_AT_LIMIT` | `false` | `true` also stops the test at the limit |
 | `ALARM_SECONDS` | `6` | Siren at the limit and on each violation after it; `0` = silent |
-| `SOUND_CHECK` | `true` | Student plays a test siren and confirms full volume before Start |
+| `SOUND_CHECK` | `true` | Student plays a soft test chime and confirms their volume is up before Start |
 | `RESIZE_TOLERANCE_PX` | `30` | Size change ignored as noise |
 | `SECONDS_PER_QUESTION` | `90` | Countdown per question |
 | `WARN_AT_SECONDS` / `DANGER_AT_SECONDS` | `15` / `5` | When the ring turns amber / red |

@@ -881,12 +881,34 @@
     playSiren(secs);
   }
 
-  // Start-screen sound check: the student must hear the alarm first.
+  // A soft two-note chime for the sound check — the siren is kept for
+  // malpractice, so nobody hears it just for setting up.
+  function playChime() {
+    if (!audioCtx) return;
+    try {
+      audioCtx.resume();
+      const t0 = audioCtx.currentTime;
+      [[660, 0], [880, 0.28]].forEach(([freq, at]) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t0 + at);
+        gain.gain.exponentialRampToValueAtTime(0.18, t0 + at + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.6);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t0 + at);
+        osc.stop(t0 + at + 0.65);
+      });
+    } catch (e) { /* ignore */ }
+  }
+
+  // Start-screen sound check: the student must hear the chime first.
   function testSound() {
     unlockAudio();
-    playSiren(2);
+    playChime();
     $("#in-sound").disabled = false;
-    $("#sound-hint").textContent = "Didn't hear it? Unmute, unplug headphones, turn the volume to full, and play it again.";
+    $("#sound-hint").textContent = "Didn't hear it? Unmute, unplug headphones, turn the volume up, and play it again.";
   }
 
   const totalViolations = () => S.v.exits + S.v.resizes + S.v.inspect + S.v.automation;
