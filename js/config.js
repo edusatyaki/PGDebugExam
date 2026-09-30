@@ -7,7 +7,7 @@ const CONFIG = {
   /* Paste the Apps Script Web App URL here after deploying (see README).
      It must end in /exec — NOT /dev.
      Leave it as "" to run the quiz offline (results stay in the browser). */
-  APPS_SCRIPT_URL: "",
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzvsSgptl39RRY0gJdpfce25rMcZkossUDCngoaC6xlze9Q3syl09XlTP_L5fsrWh_d/exec",
 
   /* Branding shown on the start screen */
   QUIZ_TITLE:    "PostgreSQL <i>Debugging</i> Test",
